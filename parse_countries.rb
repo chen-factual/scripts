@@ -1,32 +1,30 @@
 
 
-ifname = "./countries_grid.tab"
-ofname_base = "./countries_"
+$ifname = "./countries_grid.tab"
+$ofname_base = "./country_polys/countries_"
 
-ifh = File.new(ifname, 'r')
-ofh_arr = []
+$ifh = File.new($ifname, 'r')
+$ofh_arr = []
 
 for i in 0..17
-  ofh = File.new(ofname_base + i.to_s + '.tab', 'w')
+  ofh = File.new($ofname_base + i.to_s + '.csv', 'w')
+  $ofh_arr.push(ofh)
 end
 
 #ofh.write("country_code,lat_min,long_min,polygon\n")
 
 def unroll_multi(wkt)
   matches = wkt.scan(/\(\([^\(\)]+\)\)/)
-  matches.each { |match|
-    #print "match: ", match, "\n"
-  }
   return matches
 end
 
 # Write to different file based on latitude
 def write_row(row, lat)
   file_no = (lat/10).floor + 9
-  ofh[file_no].write(row + "\n")
+  $ofh_arr[file_no].write(row + "\n")
 end
 
-while (line = ifh.gets) do
+while (line = $ifh.gets) do
   #print line
   matches = line.scan(/(.*?)\t(.*)/)
   if (matches[0][1] && matches[0][0] != 'country_code')
@@ -62,7 +60,8 @@ while (line = ifh.gets) do
     if (poly =~ /MULTIPOLYGON/i)
       unrolled = unroll_multi(poly)
       unrolled.each { |single|
-        row = matches[0][0] + "," + lat_min.floor.to_s + "," + long_min.floor.to_s + ",\"" + single + "\""
+        newPoly = "POLYGON" + single
+        row = matches[0][0] + "," + lat_min.floor.to_s + "," + long_min.floor.to_s + ",\"" + newPoly + "\""
         write_row(row, lat_min.floor)
       }
     else

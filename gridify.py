@@ -1,4 +1,3 @@
-import geohash
 from pyspatialite import dbapi2 as db
 
 conn = db.connect('countries_grid.sqlite')
@@ -58,12 +57,8 @@ def clean_up():
   # cur.execute('DROP TABLE countries_indexed')
   cur.execute('VACUUM')
 
-
-
-
-
-create_indexed();
-create_grid();
+# create_indexed();
+# create_grid();
 create_countries();
-clean_up();
+#clean_up();
 conn.commit();
