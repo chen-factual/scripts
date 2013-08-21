@@ -24,7 +24,7 @@ class MCAnalyzer
   COUNTRY = 9
 
   def initialize(args)
-    if (isCSV(args['src']))
+    if (args.has_key?('nlines'))
       generate_samples(args['nlines'], args['src'])
     else
       @samples = File.open(args['src'], 'r')
@@ -86,7 +86,7 @@ class MCAnalyzer
   def initialize_api()
     begin
       cfg = YAML.load_file(File.expand_path(AUTH_FILE, __FILE__))
-      @factual = Factual.new(cfg['key'], cfg['secret'], :host => '10.20.10.204:10000')
+      @factual = Factual.new(cfg['key'], cfg['secret'])
     rescue
       throw "Failed to load Factual API authentication"
     end
@@ -244,13 +244,4 @@ class MCAnalyzer
     @num_resolved_no_name = 0
     @num_unresolved = 0
   end
-
 end
-
-NLINES = 10000
-SOURCE = "test_data.csv"
-#SOURCE = "sample.json"
-
-analyzer = MCAnalyzer.new('nlines' => NLINES, 'src' => SOURCE)
-analyzer.resolve()
-analyzer.print_stats()
