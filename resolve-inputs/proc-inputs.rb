@@ -6,11 +6,29 @@ class Stats
     @results = {}
     @file = file
     @n = n_summaries
+    read_inputs()
   end
 
-  def run()
-    read_inputs()
-    process_inputs()
+  def process_inputs()
+    @inputs.each do |idx, cluster|
+      cluster.each do |val|
+        compare_with_rest(val, idx)
+      end
+      if idx % 25 == 0
+        puts idx
+      end
+    end
+  end
+
+  def process_summaries()
+    @inputs.each do |idx, cluster|
+      for i in 0..cluster.length
+        for j in i..cluster.length
+          result = compare(cluster[i], cluster[j])
+          record_summaries(result)
+        end
+      end
+    end
   end
 
   def print_results()
@@ -42,22 +60,11 @@ class Stats
     clusterFile.close()
   end
 
-  def process_inputs()
-    @inputs.each do |idx, cluster|
-      cluster.each do |val|
-        compare_with_rest(val, idx)
-      end
-      if idx % 25 == 0
-        puts idx
-      end
-    end
-  end
-
   def compare_with_rest(val1, idx1)
     @inputs.each do |idx2, cluster|
       cluster.each do |val2|
         result = compare(val1, val2)
-        record(result, idx1, idx2)
+        record_input(result, idx1, idx2)
       end
     end
   end
@@ -92,7 +99,7 @@ class PhoneStats < Stats
     return [len, matches]
   end
 
-  def record(result, idx1, idx2)
+  def record_input(result, idx1, idx2)
     len = result[0]
     matches = result[1]
     @results[len] = {} if @results[len].nil?
@@ -103,6 +110,14 @@ class PhoneStats < Stats
     else
       @results[len][matches][1] += 1
     end
+  end
+
+  def record_summaries(result)
+    len = result[0]
+    matches = result[1]
+
+    @results[len][matches] = 0 if @results[len][matches].nil?
+    @results[len][matches] += 1
   end
 
 end
@@ -132,10 +147,15 @@ class CategoryStats < Stats
       end
     end
 
+
+    # puts "Cat #{common_cats} min #{min_len} max #{max_len} cat/min #{common_cats / min_len.to_f} cat/max #{common_cats / max_len.to_f}"
+    min_max_avg = (min_len + max_len) / 2.0
+    # return common_cats / min_max_avg
+    # return common_cats / min_len.to_f
     return common_cats / max_len.to_f
   end
 
-  def record(result, idx1, idx2)
+  def record_input(result, idx1, idx2)
     @results[result] = [0, 0] if @results[result].nil?
 
     if idx1 == idx2
@@ -144,9 +164,16 @@ class CategoryStats < Stats
       @results[result][1] += 1
     end
   end
+
+  def record_summaries(result)
+    @results[result] = 0 if @results[result].nil?
+    @results[result] += 1
+  end
+
 end
 
 #stats = PhoneStats.new(ARGV[0], 500)
-stats = CategoryStats.new(ARGV[0], 500)
-stats.run()
+stats = CategoryStats.new(ARGV[0], 5000)
+# stats.process_inputs()
+stats.process_summaries()
 stats.print_results()
