@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<schema name="79a5d260-9936-012e-a497-08002771b0fd" version="1.5">
+
+  <types>
+
+    <!--
+      Standard solr fields
+      -->
+
+    <fieldType name="string"   class="solr.StrField"     sortMissingLast="true" omitNorms="true"/>
+    <fieldType name="boolean"  class="solr.BoolField"    sortMissingLast="true" omitNorms="true"/>
+    <fieldType name="location" class="solr.LatLonType"   sortMissingLast="true" subFieldSuffix="_coordinate"/>
+    <fieldType name="integer"  class="solr.TrieField"    sortMissingLast="true" type="integer" omitNorms="true" positionIncrementGap="0" indexed="true" stored="false" />
+    <fieldType name="float"    class="solr.TrieField"    sortMissingLast="true" type="float"   omitNorms="true" positionIncrementGap="0" indexed="true" stored="false" />
+    <fieldType name="long"     class="solr.TrieField"    sortMissingLast="true" type="long"    omitNorms="true" positionIncrementGap="0" indexed="true" stored="false" />
+    <fieldType name="double"   class="solr.TrieField"    sortMissingLast="true" type="double"  omitNorms="true" positionIncrementGap="0" indexed="true" stored="false" />
+    <fieldType name="tdouble4" class="solr.TrieField"    sortMissingLast="true" type="double"  omitNorms="true" positionIncrementGap="0" precisionStep="4" indexed="true" stored="false" />
+    <fieldType name="ignored"  class="solr.StrField"     stored="false" indexed="false"  />
+    <fieldType name="random"   class="solr.RandomSortField" indexed="true" />
+
+    <fieldType name="time_range"
+               class="solr.SpatialRecursivePrefixTreeFieldType"
+               spatialContextFactory="com.spatial4j.core.context.jts.JtsSpatialContextFactory"
+               distErrPct="0"
+               maxDistErr="1"
+               prefixTree="quad"
+               geo="false"
+               worldBounds="0 0 7 1440"
+               units="degrees" />
+
+    <fieldType name="location_rpt"
+               class="solr.SpatialRecursivePrefixTreeFieldType"
+               spatialContextFactory="com.spatial4j.core.context.jts.JtsSpatialContextFactory"
+               distErrPct="0.025"
+               maxDistErr="0.000009"
+               units="degrees" />
+      <!--
+        Standard Text
+        -->
+
+      <fieldType name="standard_text" class="solr.TextField" positionIncrementGap="100">
+        <analyzer type="index">
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.WordDelimiterFilterFactory" preserveOriginal="1" generateWordParts="1" generateNumberParts="1" catenateAll="1" splitOnCaseChange="1"/>
+          <filter class="solr.ASCIIFoldingFilterFactory"/>
+          <filter class="solr.LowerCaseFilterFactory"/>
+          <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
+        </analyzer>
+        <analyzer type="query">
+          <charFilter class="solr.PatternReplaceCharFilterFactory" pattern="-" replacement=" "/>
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.ASCIIFoldingFilterFactory"/>
+          <filter class="solr.LowerCaseFilterFactory"/>
+          <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
+        </analyzer>
+      </fieldType>
+  </types>
+
+
+  <fields>
+
+    <!--
+    :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+    :: Stock factual fields
+    :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+    -->
+
+      <!--
+      :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+      :: factual_id
+      :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+      -->
+
+      <field name="factual_id"
+             type="string"
+             indexed="true"
+             stored="true"
+             multiValued="false"
+             omitNorms="true" />
+
+      <field name="uuid"
+             type="string"
+             indexed="true"
+             stored="true"
+             multiValued="false"
+             omitNorms="true" />
+
+      <field name="md5"
+             type="string"
+             indexed="true"
+             stored="true"
+             multiValued="false"
+             omitNorms="true" />
+
+    <field name="key" type="string"  indexed="true"  stored="true"  multiValued="false" omitNorms="true" omitTermFreqAndPositions="true" />
+    <field name="value" type="string"  indexed="true"  stored="true"  multiValued="false" omitNorms="true" omitTermFreqAndPositions="true" />
+    <field name="raw_json" type="string"  indexed="false"  stored="true"  compressed="true" multiValued="false" omitNorms="true" omitTermFreqAndPositions="true" />
+    <field name="_id" type="string" indexed="true" stored="true" required="true" multiValued="false" omitNorms="true" omitTermFreqAndPositions="true" />
+    <dynamicField name="*" type="string"  indexed="false" stored="true"  multiValued="false"/>
+  </fields>
+
+  <uniqueKey>uuid</uniqueKey>
+  <solrQueryParser defaultOperator="AND"/>
+
+</schema>
+

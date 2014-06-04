@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<config>
+
+  <!-- Index config parameters -->
+
+  <indexConfig>
+    <ramBufferSizeMB>1024</ramBufferSizeMB>
+    <maxBufferedDocs>1000</maxBufferedDocs>
+    <maxFieldLength>10000</maxFieldLength>
+  </indexConfig>
+
+
+  <!-- Lib directories -->
+
+  <lib dir="/var/apps/solr/lib" />
+  <lib dir="./lib" />
+  <lib dir="../lib" />
+
+
+  <!-- Request Dispatcher handler -->
+
+  <requestDispatcher handleSelect="true" />
+
+
+  <!-- Standard request handler -->
+
+  <requestHandler name="standard" class="solr.StandardRequestHandler" default="true" >
+    <lst name="defaults">
+      <str name="q">*:*</str>
+      <str name="qf">factual_id</str>
+    </lst>
+    <lst name="invariants">
+      <str name="facet.method">fc</str>
+    </lst>
+  </requestHandler>
+
+
+  <!-- Admin request handler -->
+
+  <requestHandler name="/admin/" class="org.apache.solr.handler.admin.AdminHandlers" />
+
+
+  <!-- Update handlers -->
+
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+<!--
+    <updateLog class="solr.FSUpdateLog">
+      <str name="dir">${solr.data.dir:}</str>
+    </updateLog>
+-->
+  </updateHandler>
+
+<!--
+  <requestHandler name="/get" class="solr.RealTimeGetHandler">
+     <lst name="defaults">
+       <str name="omitHeader">true</str>
+       <str name="wt">json</str>
+       <str name="indent">true</str>
+     </lst>
+  </requestHandler>
+-->
+  
+  <requestHandler name="/update" class="solr.UpdateRequestHandler">
+    <lst name="defaults">
+      <str name="update.chain">script</str>
+    </lst>
+  </requestHandler>
+
+  <requestHandler name="/update/json" class="solr.ExtendedUpdateRequestHandler">
+    <lst name="defaults">
+      <str name="stream.contentType">application/json</str>
+      <str name="update.chain">script</str>
+    </lst>
+  </requestHandler>
+
+  <!-- Update Processor -->
+
+  <updateRequestProcessorChain name="script">
+    <processor class="solr.UpdateProcessorFactory" />
+    <processor class="solr.LogUpdateProcessorFactory" />
+    <processor class="solr.RunUpdateProcessorFactory" />
+  </updateRequestProcessorChain>
+
+  <!-- Match Versions
+         Build the indexes as solr 4.0 compatible
+  -->
+
+  <luceneMatchVersion>LUCENE_40</luceneMatchVersion>
+
+
+  <!-- Caching -->
+
+  <query>
+    <queryResultCache class="solr.LRUCache"     size="16384" initialSize="4096" autowarmCount="0"/>
+    <filterCache      class="solr.FastLRUCache" size="16384" initialSize="4096" autowarmCount="0"/>
+    <listener event="newSearcher" class="solr.QuerySenderListener">
+          <arr name="queries">
+            <lst>
+              <str name="q">*:*</str>
+              <str name="facet.field">category_ids</str>
+              <str name="facet.field">category_labels</str>
+              <str name="facet.field">region</str>
+              <str name="facet.field">locality</str>
+              <str name="facet">true</str>
+            </lst>
+            <lst>
+              <str name="q">*:*</str>
+              <str name="d">35</str>
+              <str name="sfield">geo</str>
+              <str name="pt">30.58289,-96.33751</str>
+              <str name="distance">product(geodist(),1000)</str>
+              <str name="sort">$distance asc</str>
+            </lst>
+            <lst>
+              <str name="q">*:*</str>
+              <str name="d">35</str>
+              <str name="sfield">geo</str>
+              <str name="pt">30.58289,-96.33751</str>
+              <str name="distance">product(geodist(),1000)</str>
+              <str name="sort">$distance asc</str>
+              <str name="fl">*,$distance</str>
+              <str name="fq">_query_:"{!bbox}"</str>
+              <str name="fq">status:1 OR status.is_blank:true</str>
+            </lst>
+          </arr>
+        </listener>
+        <listener event="firstSearcher" class="solr.QuerySenderListener">
+          <arr name="queries">
+            <lst>
+              <str name="q">*:*</str>
+              <str name="facet.field">category_ids</str>
+              <str name="facet.field">category_labels</str>
+              <str name="facet.field">region</str>
+              <str name="facet.field">locality</str>
+              <str name="facet">true</str>
+            </lst>
+            <lst>
+              <str name="q">*:*</str>
+              <str name="d">35</str>
+              <str name="sfield">geo</str>
+              <str name="pt">30.58289,-96.33751</str>
+              <str name="distance">product(geodist(),1000)</str>
+              <str name="sort">$distance asc</str>
+            </lst>
+            <lst>
+              <str name="q">*:*</str>
+              <str name="d">35</str>
+              <str name="sfield">geo</str>
+              <str name="pt">30.58289,-96.33751</str>
+              <str name="distance">product(geodist(),1000)</str>
+              <str name="sort">$distance asc</str>
+              <str name="fl">*,$distance</str>
+              <str name="fq">_query_:"{!bbox}"</str>
+              <str name="fq">status:1 OR status.is_blank:true</str>
+            </lst>
+          </arr>
+        </listener>
+  </query>
+
+  <!-- JSON response writer -->
+
+  <queryResponseWriter name="json" class="solr.ExtendedJSONResponseWriter"></queryResponseWriter>
+
+</config>
+
