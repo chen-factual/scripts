@@ -100,7 +100,7 @@
     <dynamicField name="*" type="string"  indexed="false" stored="true"  multiValued="false"/>
   </fields>
 
-  <uniqueKey>uuid</uniqueKey>
+  <uniqueKey>_id</uniqueKey>
   <solrQueryParser defaultOperator="AND"/>
 
 </schema>
