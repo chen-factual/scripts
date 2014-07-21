@@ -1,0 +1,23 @@
+;; Get UUIDs
+uuids <- [-timecheck]
+  ruby get-uuids.rb 1000 > $OUTPUT0
+
+;; Read uuids inputs
+inputs, name-urls <- uuids
+  ruby get-inputs.rb $OUTPUT0 $OUTPUT1 < $INPUT0
+
+;; Parse 3rd party IDs
+name-ids <- name-urls
+  ruby parse-ids.rb < $INPUT0 > $OUTPUT0
+
+;; Generate histogram of domains and spread of multi-ID summaries
+domain-hist, summary-hist <- name-ids
+  ruby gen-hist.rb $OUTPUT0 $OUTPUT1 < $INPUT0
+
+;; Filter for summaries with 2 distinct IDs from at least 2 domains
+possible-overfolds <- name-ids, inputs
+  ruby filter-records.rb $INPUT1 2 4 < $INPUT0 > $OUTPUT0
+
+;; Print possible overfold clusters in fashion that's easier to debug
+csv-overfolds <- possible-overfolds
+  ruby print-csv-clusters.rb < $INPUT0 > $OUTPUT0
