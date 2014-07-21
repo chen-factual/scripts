@@ -1,0 +1,1 @@
+hadoop jar hadoop-extraction-workflow-hadoop.jar workflows.extract.poi.USScarecrow2Workflow sc_rules_sha=580d3b9143ff3f531267674dc9101b307c043851 auto_build=false json_config="poi-run-configs/us_build_develop.json" project_name="chen_test" extraction_dataset_id="txIgmU" summary_view_id="Iw1HPj" previewable_view_ids=Iw1HPj
