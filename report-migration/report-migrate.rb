@@ -69,12 +69,11 @@ class ReportMigrate
     sub = prod_report['report_name']
     ensure_report_data_col(@dev, report['view_id'], sub)
     data = dev_report_data(prod_report)
-    timestamp = prod_report['created_at'] || prod_report['insert_time']
     begin
-      store_dev_data(sub, report['_id'], data, timestamp)
+      store_dev_data(sub, report['_id'], data, prod_report)
     rescue Exception => e
       warn "Execption: " + e.message
-      warn "Failed to store data: #{prod_report['run_name']} #{view_id} #{sub} #{timestamp}"
+      warn "Failed to store data: #{prod_report['run_name']} #{report['view_id']} #{sub} #{timestamp}"
       warn 'Failed to store data: ' + data.to_s
     end
 
@@ -117,17 +116,36 @@ class ReportMigrate
     return prod_data
   end
 
-  def store_dev_data(report_name, id, data, timestamp)
+  def store_dev_data(report_name, id, data, prod_report)
+    timestamp = prod_report['created_at'] || prod_report['insert_time']
     col_name = dev_col_name(report_name)
-    query = {
-      :report_id => id,
-      :timestamp => timestamp
-    }
+    query = dev_report_data_query(id, timestamp)
     doc = {
       :report_id => id,
-      :data => data,
       :timestamp => timestamp
     }
+    # For DQM report, add extra meta data
+    if report_name == 'data_quality_metrics_accuracy'
+      code_ver = prod_report['config']['dqm__code_sha']
+      data_ver = prod_report['config']['dqm__data_sha'] || prod_report['config']['dqm_inputs_version']
+      thresh = prod_report['config']['resolve_threshold']
+      data.each_pair do |metal, metal_data|
+        doc[:config] = {
+          :code_sha => code_ver,
+          :dqm_inputs_version => data_ver,
+          :resolve_threshold => thresh,
+          :metal => metal
+        }
+        doc[:data] = metal_data
+        store_dev_data_doc(col_name, query, doc)
+      end
+    else
+      doc[:data] = data
+      store_dev_data_doc(col_name, query, doc)
+    end
+  end
+
+  def store_dev_data_doc(col_name, query, doc)
     opts = {
       :upsert => true
     }
@@ -142,13 +160,19 @@ class ReportMigrate
     :not_active => {
       :$nin => ['true', true]
     },
-    :report_name => 'data_quality_metrics_accuracy'
   }
 
   def dev_report_query(run, view)
     return {
       :run_name => run,
       :view_id => view
+    }
+  end
+
+  def dev_report_data_query(id, timestamp)
+    return {
+      :report_id => id,
+      :timestamp => timestamp
     }
   end
 
@@ -219,4 +243,3 @@ end
 
 migrate = ReportMigrate.new
 migrate.copy_reports
-# migrate.copy_report_data
