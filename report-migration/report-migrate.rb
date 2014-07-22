@@ -131,7 +131,7 @@ class ReportMigrate
     opts = {
       :upsert => true
     }
-    # warn 'Inserting data ' + data.to_s
+    # warn 'Inserting data ' + data.to_json
     @dev[col_name].update query, doc, opts
   end
 
@@ -141,7 +141,8 @@ class ReportMigrate
     :live => 'live',
     :not_active => {
       :$nin => ['true', true]
-    }
+    },
+    :report_name => 'data_quality_metrics_accuracy'
   }
 
   def dev_report_query(run, view)
@@ -163,7 +164,6 @@ class ReportMigrate
       end
       data = insert_data(data, keys, row['value'])
     end
-    # warn 'packed ' + data.to_json
     return data
   end
 
@@ -175,7 +175,7 @@ class ReportMigrate
       obj[cur_key] = val if obj.is_a?(Hash)
     elsif key_arr.length > 0
       # Need to work out sub keys
-      if obj[cur_key].is_a?(Hash)
+      if not obj[cur_key].is_a?(Hash)
         obj.delete(cur_key)
       end
       if obj.has_key?(cur_key)
