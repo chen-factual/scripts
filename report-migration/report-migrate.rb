@@ -23,64 +23,68 @@ class ReportMigrate
     new_reports = {}
     reports = @stitch_reports.find LIVE_FILTER
     reports.each do |report|
-      run = report['run_name']
-      view = report['view_id']
-      rep = report['report_name']
-      if new_reports[run].nil?
-        new_reports[run] = {}
-      end
-      if new_reports[run][view].nil?
-        new_reports[run][view] = {}
-      end
-      new_reports[run][view][rep] = true
+      dev_report = create_dev_report(report)
+      copy_report_data(report, dev_report)
     end
+  end
 
-    new_reports.each_pair do |run, view_data|
-      view_data.each_pair do |view, report_data|
-        query = {
-          :run_name => run,
-          :view_id => view
-        }
-        new_report = {
-          :run_name => run,
-          :view_id => view,
-          :reports => report_data
-        }
-        opts = {
-          :continue_on_error => true,
-          :upsert => true
-        }
-        @dev_reports.update query, new_report, opts
-      end
+  # Create report in dev db. If it already
+  # exists then update the existing document
+  def create_dev_report(report)
+    run = report['run_name']
+    view = report['view_id']
+    query = dev_report_query(run, view)
+    existing = @dev_reports.find_one(query)
+    if existing.nil?
+      update_dev_report(query, report)
+    else
+      insert_new_dev_report(report)
+    end
+    return @dev_reports.find_one(query)
+  end
+
+  def update_dev_report(query, report)
+    sub_report = report['report_name']
+    update_doc = {
+      :$set => {
+        "reports.#{sub_report}" => true
+      }
+    }
+    @dev_reports.update(query, update_doc)
+  end
+
+  def insert_new_dev_report(report)
+    new_report = {
+      :run_name => report['run_name'],
+      :view_id => report['view_id'],
+      :reports => {
+        report['report_name'] => true
+      }
+    }
+    @dev_reports.insert new_report
+  end
+
+  # Copy report data from old format to new format
+  def copy_report_data(prod_report, report)
+    sub = prod_report['report_name']
+    ensure_report_data_col(@dev, report['view_id'], sub)
+    data = dev_report_data(prod_report)
+    timestamp = prod_report['created_at'] || prod_report['insert_time']
+    begin
+      store_dev_data(sub, report['_id'], data, timestamp)
+    rescue Exception => e
+      warn "Execption: " + e.message
+      warn "Failed to store data: #{prod_report['run_name']} #{view_id} #{sub} #{timestamp}"
+      warn 'Failed to store data: ' + data.to_s
     end
 
   end
 
-  # Copy data for reports
-  def copy_report_data()
-    get_dev_reports().each do |report|
-      subreports = report['reports']
-      run_name = report['run_name']
-      view_id = report['view_id']
-      report_id = report['_id']
-      warn 'getting data for dev report ' + report_id.to_s
-      subreports.each_pair do |sub, _|
-        warn 'copying sub ' + sub
-        # Ensure collection has desired index built
-        ensure_report_data_col(@dev, view_id, sub)
-        prod_report = get_prod_report(run_name, view_id, sub)
-        data = get_prod_data(prod_report['_id'], view_id, sub)
-        packed_data = pack_data(data)
-        timestamp = prod_report['created_at'] || prod_report['insert_time']
-        begin
-          store_dev_data(sub, report_id, packed_data, timestamp)
-        rescue Exception => e
-          warn "Execption: " + e.message
-          warn "Failed to store data: #{run_name} #{view_id} #{sub} #{timestamp}"
-          warn 'Failed to store data: ' + packed_data.to_s
-        end
-      end
-    end
+  def dev_report_data(prod_report)
+    data = get_prod_data(prod_report['_id'], prod_report['view_id'], prod_report['report_name'])
+    warn "report #{prod_report['_id']} #{prod_report['report_name']} num data rows " + data.count.to_s
+    packed_data = pack_data(data)
+    return packed_data
   end
 
   # REPORTS
@@ -127,7 +131,7 @@ class ReportMigrate
     opts = {
       :upsert => true
     }
-    warn 'Inserting data ' + data.to_s
+    # warn 'Inserting data ' + data.to_s
     @dev[col_name].update query, doc, opts
   end
 
@@ -140,10 +144,15 @@ class ReportMigrate
     }
   }
 
+  def dev_report_query(run, view)
+    return {
+      :run_name => run,
+      :view_id => view
+    }
+  end
+
   def pack_data(data_rows)
     data = {}
-    # begin
-    warn 'num data rows ' + data_rows.count.to_s
     data_rows.each do |row|
       keys = row['data'].reject do |key| key.nil? or key == '' end
       keys = keys.map do |key|
@@ -180,7 +189,6 @@ class ReportMigrate
     return obj
   end
 
-
   # Make sure report data collection has index
   def ensure_report_data_col(db, view_id, sub)
     col = dev_col_name(sub)
@@ -196,10 +204,12 @@ class ReportMigrate
     db[col].create_index(spec, opts)
   end
 
+  # Production report collection name
   def prod_col_name(view_id, report)
     return "reports_#{view_id}_#{report}"
   end
 
+  # Dev report collection name
   def dev_col_name(report)
     return "reports_#{report}"
   end
@@ -209,4 +219,4 @@ end
 
 migrate = ReportMigrate.new
 migrate.copy_reports
-migrate.copy_report_data
+# migrate.copy_report_data
