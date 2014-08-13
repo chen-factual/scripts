@@ -9,6 +9,7 @@ class ReportMigrate
   HOST_PORT = 27017
   STITCH_DB = 'stitch'
   DEV_DB = 'stitch-cg'
+  ALLOWED_REPORTS = []
 
   def initialize()
     server = MongoClient.new HOST_NAME, HOST_PORT
@@ -22,7 +23,11 @@ class ReportMigrate
   def copy_reports()
     new_reports = {}
     reports = @stitch_reports.find LIVE_FILTER
+    warn "Found " + reports.count.to_s + " reports"
     reports.each do |report|
+      if ALLOWED_REPORTS.include? report['report_name']
+        # TODO: Whitelist reports
+      end
       dev_report = create_dev_report(report)
       copy_report_data(report, dev_report)
     end
@@ -36,9 +41,9 @@ class ReportMigrate
     query = dev_report_query(run, view)
     existing = @dev_reports.find_one(query)
     if existing.nil?
-      update_dev_report(query, report)
-    else
       insert_new_dev_report(report)
+    else
+      update_dev_report(query, report)
     end
     return @dev_reports.find_one(query)
   end
@@ -50,6 +55,24 @@ class ReportMigrate
         "reports.#{sub_report}" => true
       }
     }
+    if sub_report == 'data_quality_metrics_accuracy'
+      code_ver = report['config']['dqm__code_sha']
+      data_ver = report['config']['dqm__data_sha'] || report['config']['dqm_inputs_version']
+      data = dev_report_data(report)
+      dqmReports = []
+      data.each_pair do |metal, metal_data|
+        dqmReports << {
+          :code_sha => code_ver,
+          :dqm_inputs_version => data_ver,
+          :metal => metal
+        }
+      end
+      update_doc[:$push] = {
+        :dqm_versions => {
+          :$each => dqmReports
+        }
+      }
+    end
     @dev_reports.update(query, update_doc)
   end
 
@@ -61,6 +84,9 @@ class ReportMigrate
         report['report_name'] => true
       }
     }
+    if not (report['config'].nil? or report['config']['run_version'].nil?)
+      new_report[:version] = report['config']['run_version']
+    end
     @dev_reports.insert new_report
   end
 
@@ -137,6 +163,7 @@ class ReportMigrate
           :metal => metal
         }
         doc[:data] = metal_data
+        query[:config][:metal] = metal
         store_dev_data_doc(col_name, query, doc)
       end
     else
@@ -159,8 +186,10 @@ class ReportMigrate
     :live => 'live',
     :not_active => {
       :$nin => ['true', true]
-    },
+    }
   }
+    # :run_name => "20130603_112345_PDT_us_pod_batchsummary_bm01-130603-112346-kewule-423",
+    # :view_id => "Iw1HPj"
 
   def dev_report_query(run, view)
     return {
@@ -216,6 +245,7 @@ class ReportMigrate
   # Make sure report data collection has index
   def ensure_report_data_col(db, view_id, sub)
     col = dev_col_name(sub)
+    warn 'ensuring index for ' + col
     # Create compound index on report_id and timestamp
     spec = {
       :report_id => Mongo::DESCENDING,
