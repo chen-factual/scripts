@@ -10,7 +10,7 @@ db = server['stitch-cg']
 
 cols = db.collection_names
 cols.each do |col|
-  if col.match /reports_/
+  if col.match /reports/
     db[col].remove
   end
 end
