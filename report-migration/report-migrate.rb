@@ -22,15 +22,31 @@ class ReportMigrate
 
   def copy_reports()
     new_reports = {}
-    reports = @stitch_reports.find LIVE_FILTER
+    reports = @stitch_reports.find CUST_FILTER
     warn "Found " + reports.count.to_s + " reports"
     reports.each do |report|
       if ALLOWED_REPORTS.include? report['report_name']
         # TODO: Whitelist reports
       end
+      report = find_latest_report(report)
       dev_report = create_dev_report(report)
       copy_report_data(report, dev_report)
     end
+  end
+
+  # Find latest report for this build, view, and report type
+  def find_latest_report report
+    query = {
+      :run_name => report["run_name"],
+      :view_id => report["view_id"],
+      :report_name => report["report_name"]
+    }
+    opts = {
+      :sort => [["created_at", Mongo::DESCENDING]],
+      :limit => 1
+    }
+    reports = @stitch_reports.find query, opts
+    return reports.next
   end
 
   # Create report in dev db. If it already
@@ -48,32 +64,44 @@ class ReportMigrate
     return @dev_reports.find_one(query)
   end
 
+  # For existing build reports entry in dev DB,
+  # update it with a new report
   def update_dev_report(query, report)
     sub_report = report['report_name']
+    dev_report = get_dev_report(query)
     update_doc = {
       :$set => {
         "reports.#{sub_report}" => true
       }
     }
     if sub_report == 'data_quality_metrics_accuracy'
-      code_ver = report['config']['dqm__code_sha']
-      data_ver = report['config']['dqm__data_sha'] || report['config']['dqm_inputs_version']
-      data = dev_report_data(report)
-      dqmReports = []
-      data.each_pair do |metal, metal_data|
-        dqmReports << {
-          :code_sha => code_ver,
-          :dqm_inputs_version => data_ver,
-          :metal => metal
-        }
-      end
-      update_doc[:$push] = {
-        :dqm_versions => {
-          :$each => dqmReports
-        }
-      }
+      update_doc = update_dqm_doc(update_doc, dev_report, report)
     end
     @dev_reports.update(query, update_doc)
+  end
+
+  # Extend the Mongo update document with DQM info
+  def update_dqm_doc(update_doc, dev_report, report)
+    code_ver = report['config']['dqm__code_sha']
+    data_ver = report['config']['dqm__data_sha'] || report['config']['dqm_inputs_version']
+    dqmReports = dev_report["dqm_versions"] || []
+    data = dev_report_data(report)
+    data.each_pair do |metal, metal_data|
+      match = dqmReports.select do |cfg|
+        cfg["code_sha"] == code_ver &&
+        cfg["dqm_inputs_version"] == data_ver &&
+        cfg["metal"] == metal
+      end
+      if match.length == 0
+        dqmReports << {
+          "code_sha" => code_ver,
+          "dqm_inputs_version" => data_ver,
+          "metal" => metal
+        }
+      end
+    end
+    update_doc[:$set][:dqm_versions] = dqmReports
+    return update_doc
   end
 
   def insert_new_dev_report(report)
@@ -98,18 +126,22 @@ class ReportMigrate
     begin
       store_dev_data(sub, report['_id'], data, prod_report)
     rescue Exception => e
-      warn "Execption: " + e.message
-      warn "Failed to store data: #{prod_report['run_name']} #{report['view_id']} #{sub} #{timestamp}"
-      warn 'Failed to store data: ' + data.to_s
+      $stderr.puts "Execption: " + e.message
+      $stderr.puts "Failed to store data: #{prod_report['run_name']} #{report['view_id']} #{sub}"
+      $stderr.puts 'Failed to store data: ' + prod_report.to_s
+      $stderr.puts 'Failed to store data: ' + data.to_s
     end
 
   end
 
   def dev_report_data(prod_report)
-    data = get_prod_data(prod_report['_id'], prod_report['view_id'], prod_report['report_name'])
-    warn "report #{prod_report['_id']} #{prod_report['report_name']} num data rows " + data.count.to_s
-    packed_data = pack_data(data)
-    return packed_data
+    data_cursor = get_prod_data(prod_report['_id'], prod_report['view_id'], prod_report['report_name'])
+    warn "report #{prod_report['_id']} #{prod_report['report_name']} num data rows " + data_cursor.count.to_s
+    if prod_report['report_name'] == 'top_records'
+      return top_records_data(data_cursor)
+    else
+      return pack_data(data_cursor)
+    end
   end
 
   # REPORTS
@@ -118,6 +150,10 @@ class ReportMigrate
     reports = @dev_reports.find
     warn 'num dev reports ' + reports.count.to_s
     return reports
+  end
+
+  def get_dev_report(query)
+    return @dev_reports.find(query).next
   end
 
   def get_prod_report(run, view_id, report)
@@ -135,6 +171,7 @@ class ReportMigrate
 
   # DATA
 
+  # Retrieve data from prod DB
   def get_prod_data(id, view_id, report)
     col_name = prod_col_name(view_id, report)
     query = { :report_id => id }
@@ -142,6 +179,7 @@ class ReportMigrate
     return prod_data
   end
 
+  # Store report data into target dev DB
   def store_dev_data(report_name, id, data, prod_report)
     timestamp = prod_report['created_at'] || prod_report['insert_time']
     col_name = dev_col_name(report_name)
@@ -163,7 +201,8 @@ class ReportMigrate
           :metal => metal
         }
         doc[:data] = metal_data
-        query[:config][:metal] = metal
+        query[:config] = { :metal => metal }
+        warn "DQM: storing #{id} #{timestamp} #{metal}"
         store_dev_data_doc(col_name, query, doc)
       end
     else
@@ -177,7 +216,12 @@ class ReportMigrate
       :upsert => true
     }
     # warn 'Inserting data ' + data.to_json
-    @dev[col_name].update query, doc, opts
+    begin
+      @dev[col_name].update query, doc, opts
+    rescue Exception => e
+      $stderr.puts "Exception: " + e.message
+      $stderr.puts "Trying to store: " + doc.to_s
+    end
   end
 
   private
@@ -188,8 +232,16 @@ class ReportMigrate
       :$nin => ['true', true]
     }
   }
-    # :run_name => "20130603_112345_PDT_us_pod_batchsummary_bm01-130603-112346-kewule-423",
-    # :view_id => "Iw1HPj"
+
+  PROD_FILTER = {
+    :run_name => /batchsummary/
+  }
+
+  CUST_FILTER = {
+    # :run_name => "origin-stats"
+    :run_name => /ninipo/,
+    :view_id => 'Iw1HPj'
+  }
 
   def dev_report_query(run, view)
     return {
@@ -205,17 +257,33 @@ class ReportMigrate
     }
   end
 
-  def pack_data(data_rows)
+  def top_records_data(data_cursor)
+    data_doc = data_cursor.next
     data = {}
-    data_rows.each do |row|
-      keys = row['data'].reject do |key| key.nil? or key == '' end
-      keys = keys.map do |key|
-        if not key.is_a?(String)
-          key = key.to_s
-        end
-        key.gsub(".", "_!DOT_")
+    data_doc.each_pair do |key, val|
+      # Copy core data key-vals
+      if key != '_id' and key != 'report_id'
+        data[key] = val
       end
-      data = insert_data(data, keys, row['value'])
+    end
+    return data
+  end
+
+  def pack_data(data_cursor)
+    data = {}
+    data_cursor.each do |row|
+      begin
+        keys = row['data'].reject do |key| key.nil? or key == '' end
+        keys = keys.map do |key|
+          if not key.is_a?(String)
+            key = key.to_s
+          end
+          key.gsub(".", "_!DOT_")
+        end
+        data = insert_data(data, keys, row['value'])
+      rescue Exception => e
+        $stderr.puts "Failed to pack row " + row.to_s
+      end
     end
     return data
   end
@@ -245,16 +313,22 @@ class ReportMigrate
   # Make sure report data collection has index
   def ensure_report_data_col(db, view_id, sub)
     col = dev_col_name(sub)
-    warn 'ensuring index for ' + col
+    # warn 'ensuring index for ' + col
     # Create compound index on report_id and timestamp
     spec = {
       :report_id => Mongo::DESCENDING,
       :timestamp => Mongo::DESCENDING
     }
-    opts = {
-      :unique => true,
-      :drop_dups => true
-    }
+    opts = {}
+    if sub != 'data_quality_metrics_accuracy'
+      # spec["config.metal"] = Mongo::HASHED
+      # spec["config.code_sha"] = Mongo::HASHED
+      # spec["config.dqm_inputs_version"] = Mongo::HASHED
+      opts = {
+        :unique => true,
+        :drop_dups => true
+      }
+    end
     db[col].create_index(spec, opts)
   end
 
